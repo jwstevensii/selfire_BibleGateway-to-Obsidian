@@ -25,6 +25,8 @@
 # new folder. Do NOT rename the text files, or your translations will break.
 ############################################################################################
 
+# start_book=21
+# end_book=22
 
 show_help()
 {
@@ -38,23 +40,27 @@ show_help()
 	echo "  -c    Include inline navigation for the breadcrumbs plugin (e.g. 'up', 'next','previous')"
 	echo "  -y    Print navigation for the breadcrumbs plugin (e.g. 'up', 'next','previous') in the frontmatter (YAML)"
 	echo "  -l    Which language to use for file names, links, and titles"
+	echo "  -t    output contents as a table"
+  echo "  -f    use the full book name"
 	echo "  -h    Display help"
 	exit 1
 }
 
 # Clear version variable if it exists and set defaults for others
-ARG_VERSION="WEB"        # Which version to use from BibleGateway.com
-ARG_ABBR_SHORT="false"   # Use shorter book abbreviations
-ARG_BOLD_WORDS="false"   # Set words of Jesus in bold
-ARG_HEADERS="false"      # Include editorial headers
-ARG_ALIASES="false"      # Create an alias in the YAML front matter for each chapter title
-ARG_VERBOSE="false"      # Show download progress for each chapter
-ARG_BC_INLINE="false"    # Print breadcrumbs in the file
-ARG_BC_YAML="false"      # Print breadcrumbs in the YAML
-ARG_LANGUAGE="en"        # Which language translation to for file names, links, and titles
+ARG_VERSION="WEB"          # Which version to use from BibleGateway.com
+ARG_ABBR_SHORT="false"     # Use shorter book abbreviations
+ARG_BOLD_WORDS="false"     # Set words of Jesus in bold
+ARG_HEADERS="false"        # Include editorial headers
+ARG_ALIASES="false"        # Create an alias in the YAML front matter for each chapter title
+ARG_VERBOSE="false"        # Show download progress for each chapter
+ARG_BC_INLINE="false"      # Print breadcrumbs in the file
+ARG_BC_YAML="false"        # Print breadcrumbs in the YAML
+ARG_TABLE_CONTENT="false"  # Print content as a table
+ARG_FULL_BOOK_NAME="false" # Use the full book name
+ARG_LANGUAGE="en"          # Which language translation to for file names, links, and titles
 
 # Process command line args
-while getopts 'v:sbeaicyl:?h' c; do
+while getopts 'v:sbeaicytfl:?h' c; do
   case $c in
     v) ARG_VERSION=$OPTARG ;;
     s) ARG_ABBR_SHORT="true" ;;
@@ -64,6 +70,8 @@ while getopts 'v:sbeaicyl:?h' c; do
     i) ARG_VERBOSE="true" ;;
     c) ARG_BC_INLINE="true" ;;
 		y) ARG_BC_YAML="true" ;;
+    t) ARG_TABLE_CONTENT="true" ;;
+    f) ARG_FULL_BOOK_NAME="true" ;;
 		l) ARG_LANGUAGE=$OPTARG ;;
     h|?) show_help ;;
   esac
@@ -170,7 +178,8 @@ show_progress_bar()
 }
 
 # Initialise the name of the Bible folder
-bible_folder="$bible_name ($ARG_VERSION)"
+# bible_folder="$bible_name ($ARG_VERSION)"
+bible_folder="output/$ARG_VERSION"
 
 # Initialise the main index file
 echo -e "# $bible_folder" > "$bible_name.md"
@@ -180,11 +189,11 @@ if [[ $ARG_VERBOSE == "true" ]]; then
 fi
 
 # Loop through the books of the Bible
-for ((book_index=0; book_index<66; book_index++)); do
+for ((book_index=${start_book:-0}; book_index<${end_book:-66}; book_index++)); do
 
   book=${book_array[$book_index]}
   last_chapter=${chapter_array[$book_index]}
-  abbreviation=${abbr_array[$book_index]}
+  [[ $ARG_FULL_BOOK_NAME == "true" ]] && abbreviation=${book} || abbreviation=${abbr_array[$book_index]}
 
   if [[ $ARG_VERBOSE == "true" ]]; then
     show_progress_bar "$book" 0 $last_chapter "true"
@@ -201,9 +210,9 @@ for ((book_index=0; book_index<66; book_index++)); do
     ((next_chapter=chapter+1))
 
     # File naming
-    this_file="$abbreviation $chapter"
-    prev_file="$abbreviation $prev_chapter"
-    next_file="$abbreviation $next_chapter"
+    this_file="$((book_index+1)).$((chapter)) $abbreviation $chapter"
+    prev_file="$((book_index+1)).$((chapter-1)) $abbreviation $prev_chapter"
+    next_file="$((book_index+1)).$((chapter+1)) $abbreviation $next_chapter"
 
     # Add this chapter to the main index file
     echo -en " [[$this_file|$chapter]]" >> "$bible_name.md"
@@ -226,7 +235,7 @@ for ((book_index=0; book_index<66; book_index++)); do
 
     # Use original header/footer navigation if another method isn't specified
     if [[ $ARG_BC_INLINE == "false" && $ARG_BC_YAML == "false" ]]; then
-      navigation="[[$book]]"
+      navigation="[[$((book_index+1)) $book]]"
       if [[ $chapter -gt 1 ]]; then
         navigation="[[$prev_file|← $book $prev_chapter]] | $navigation"
       fi
@@ -236,7 +245,7 @@ for ((book_index=0; book_index<66; book_index++)); do
 
     # Navigation with INLINE BREADCRUMBS ENABLED
     elif [[ $ARG_BC_INLINE == "true" ]] ; then
-      navigation="(up:: [[$book]])"
+      navigation="(up:: [[$((book_index+1)) $book]])"
       if [[ $chapter -gt 1 ]]; then
         navigation="(previous:: [[$prev_file|← $book $prev_chapter]]) | $navigation"
       fi
@@ -247,8 +256,13 @@ for ((book_index=0; book_index<66; book_index++)); do
 
     # Inject navigation for non-YAML output
     title="# $book $chapter"
+
+    if [[ $ARG_TABLE_CONTENT == "true" ]]; then
+      chapter_content="|Verse|Text|Notes|\n|---|---|---|\n$chapter_content"
+    fi
+
     if [[ $ARG_BC_YAML == "true" ]]; then
-      chapter_content="$title\n\n***\n$chapter_content"
+      chapter_content="$title\n***\n$chapter_content"
     else
       chapter_content="$title\n\n$navigation\n\n***\n$chapter_content\n\n***\n\n$navigation"
     fi
@@ -256,7 +270,7 @@ for ((book_index=0; book_index<66; book_index++)); do
     # Navigation with YAML breadcrumbs
     if [[ $ARG_BC_YAML == "true" ]]; then
       # create YAML breadcrumbs
-      bc_yaml="\nup: ['$book']"
+      bc_yaml="\nup: ['$((book_index+1)) $book']"
       if [[ $chapter -gt 1 ]]; then
         bc_yaml="\nprevious: ['$prev_file']$bc_yaml"
       fi
@@ -267,7 +281,7 @@ for ((book_index=0; book_index<66; book_index++)); do
       # Compile YAML output
       yaml="---"
       if $ARG_ALIASES -eq "true"; then
-        yaml="$yaml\nAliases: [$book $chapter]"
+        yaml="$yaml\nAliases: [$((book_index+1)).$chapter $book $chapter]"
       fi
       if $ARG_BC_YAML -eq "true"; then
         yaml="$yaml$bc_yaml"
@@ -282,7 +296,7 @@ for ((book_index=0; book_index<66; book_index++)); do
     echo -e $chapter_content > "$this_file.md"
 
     # Create a folder for this book of the Bible if it doesn't exist, then move the new file into it
-    mkdir -p "./$bible_folder/$book"; mv "$this_file".md "./$bible_folder/$book"
+    mkdir -p "./$bible_folder/$((book_index+1))-$book"; mv "$this_file".md "./$bible_folder/$((book_index+1))-$book"
 
     # Update progress in terminal
     if [[ $ARG_VERBOSE == "true" ]]; then
@@ -292,9 +306,9 @@ for ((book_index=0; book_index<66; book_index++)); do
   done # End of chapter loop
 
   # Create an overview file for each book of the Bible:
-  overview_file="links: [[$bible_name]]\n# $book\n\n[[$abbreviation 1|Start Reading →]]"
-  echo -e $overview_file > "$book.md"
-  mv "$book.md" "./$bible_folder/$book"
+  overview_file="links: [[$bible_name]]\n# $book\n\n[[$((book_index+1)).1 $abbreviation 1|Start Reading →]]"
+  echo -e $overview_file > "./$bible_folder/$((book_index+1))-$book/$((book_index+1)) $book.md"
+  # mv "$book.md" "'./$bible_folder/$((book_index+1)) $book'"
 
 done # End of book loop
 
@@ -314,7 +328,12 @@ fi
 find . -name "*.md" -print0 | xargs -0 perl -pi -e 's/#.*(#####\D[1]\D)/#$1/g'
 
 # Format verses into H6 headers
-find . -name "*.md" -print0 | xargs -0 perl -pi -e 's/######\s([0-9]\s|[0-9][0-9]\s|[0-9][0-9][0-9]\s)/\n\n###### $1\n/g'
+# find . -name "*.md" -print0 | xargs -0 perl -pi -e 's/######\s([0-9]\s|[0-9][0-9]\s|[0-9][0-9][0-9]\s)/\n\n###### $1\n/g'
+if [[ $ARG_TABLE_CONTENT == "true" ]]; then
+  find . -name "*.md" -print0 | xargs -0 perl -pi -e 's/######\s([0-9]+\s)([^#]*)\s/|$1|$2||\n/g'
+else
+  find . -name "*.md" -print0 | xargs -0 perl -pi -e 's/######\s([0-9]+)([^#]*)/\n $1. $2/g'
+fi
 
 # Delete crossreferences
 find . -name "*.md" -print0 | xargs -0 perl -pi -e 's/\<crossref intro.*crossref\>//g'
